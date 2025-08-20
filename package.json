@@ -1,0 +1,22 @@
+{
+  "name": "waukesha-makerspace-utilities",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "run": "tsx",
+    "start:utilities:api": "pnpm -C apps/utilities-api dev",
+    "start:utilities:spa": "pnpm -C apps/utilities-spa dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.6.5",
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2"
+  }
+}
