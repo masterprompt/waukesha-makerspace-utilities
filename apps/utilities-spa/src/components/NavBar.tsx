@@ -1,32 +1,31 @@
+import { AppBar, Box, Button, Container, Toolbar, Typography } from "@mui/material";
 import { NavLink } from "react-router-dom";
 
-const linkStyle: React.CSSProperties = {
+const linkStyle = ({ isActive }: { isActive: boolean }) => ({
+  color: "inherit",
   textDecoration: "none",
-  padding: "0.5rem 0.75rem",
-  borderRadius: 8
-};
-
-const active: React.CSSProperties = {
-  background: "rgba(0,0,0,0.08)"
-};
+  marginLeft: 8,
+  padding: "6px 10px",
+  borderRadius: 8,
+  background: isActive ? "rgba(255,255,255,0.2)" : "transparent"
+});
 
 export default function NavBar() {
   return (
-    <header style={{
-      borderBottom: "1px solid rgba(0,0,0,0.1)",
-      padding: "0.75rem 1rem",
-      display: "flex",
-      gap: 8,
-      alignItems: "center",
-      justifyContent: "space-between"
-    }}>
-      <strong>Utilities SPA</strong>
-      <nav style={{ display: "flex", gap: 4 }}>
-        <NavLink to="/" style={({ isActive }) => ({ ...linkStyle, ...(isActive ? active : {}) })}>Home</NavLink>
-        <NavLink to="/events" style={({ isActive }) => ({ ...linkStyle, ...(isActive ? active : {}) })}>Events</NavLink>
-        <NavLink to="/duplicate" style={({ isActive }) => ({ ...linkStyle, ...(isActive ? active : {}) })}>Duplicate</NavLink>
-        <NavLink to="/settings" style={({ isActive }) => ({ ...linkStyle, ...(isActive ? active : {}) })}>Settings</NavLink>
-      </nav>
-    </header>
+    <AppBar position="static" color="primary" enableColorOnDark>
+      <Container maxWidth="lg">
+        <Toolbar disableGutters sx={{ gap: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Utilities SPA
+          </Typography>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <NavLink to="/" style={linkStyle as any}><Button color="inherit">Home</Button></NavLink>
+            <NavLink to="/events" style={linkStyle as any}><Button color="inherit">Events</Button></NavLink>
+            <NavLink to="/duplicate" style={linkStyle as any}><Button color="inherit">Duplicate</Button></NavLink>
+            <NavLink to="/settings" style={linkStyle as any}><Button color="inherit">Settings</Button></NavLink>
+          </Box>
+        </Toolbar>
+      </Container>
+    </AppBar>
   );
 }

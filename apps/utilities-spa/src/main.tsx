@@ -6,6 +6,7 @@ import Home from "@pages/Home";
 import Events from "@pages/Events";
 import Duplicate from "@pages/Duplicate";
 import Settings from "@pages/Settings";
+import { Providers } from '@components/Providers';
 
 const router = createBrowserRouter([
   {
@@ -22,6 +23,8 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <Providers>
+      <RouterProvider router={router} />
+    </Providers>
   </React.StrictMode>
 );

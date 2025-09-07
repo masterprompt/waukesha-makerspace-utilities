@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import qs from "qs";
 import { EnvironmentService } from "./EnvironmentService";
+import { set } from 'lodash-es';
 
 /** Payload for creating an event */
 export interface WAEventCreate {
@@ -37,6 +38,13 @@ export interface GetEventsOptions {
   /** Offset for paging */
   skip?: number;
 }
+
+export type DuplicateInstance =
+  | string
+  | {
+      start: string;
+      end?: string;
+    };
 
 export class WildApricotService {
   private readonly apiKey: string;
@@ -154,12 +162,14 @@ export class WildApricotService {
    *  - startDateFrom / endDateTo: time window
    *  - top / skip: pagination
    */
-  public async getEvents(options: GetEventsOptions = {}): Promise<any[]> {
+  public async getEvents(options: GetEventsOptions = {}): Promise<WAEvent[]> {
     const [client, accountId] = await Promise.all([this.makeClient(), this.getAccountId()]);
 
     // Build query params
     const params: Record<string, string | number | boolean> = {};
 
+    params["$orderby"] = "StartDate asc"; // always order by StartDate ascending  
+    params["$top"] = 25;              // default page size if not specified
     // Date window (Admin API supports StartDate/EndDate filtering on the list)
     if (options.startDateFrom) params["StartDate"] = options.startDateFrom;
     if (options.endDateTo)     params["EndDate"]   = options.endDateTo;
@@ -168,13 +178,13 @@ export class WildApricotService {
     // Example: $filter=substringof('open house',TextIndex)
     if (options.search && options.search.trim()) {
       const value = options.search.replace(/'/g, "''"); // escape single quotes
-      params["$filter"] = `substringof('${value}',TextIndex)`;
+      params["$filter"] = `substringof('Name','${value}')`;
     }
 
     // Paging
     if (typeof options.top === "number")  params["$top"]  = options.top;
     if (typeof options.skip === "number") params["$skip"] = options.skip;
-
+    console.log('params:', params)
     const { data } = await client.get(
       `/accounts/${accountId}/events`,
       { params }
@@ -182,5 +192,134 @@ export class WildApricotService {
 
     // The Admin API returns an array of events
     return Array.isArray(data) ? data : (data?.Events ?? []);
+  }
+
+  createError(err: any, extras: string[] = []) {
+      // unwrap axios error
+      const status = err?.response?.status;
+      const statusText = err?.response?.statusText;
+      const body = err?.response?.data;
+      const msg = [
+        `CloneEvent failed: ${status ?? "??"} ${statusText ?? ""}`,
+        ...extras,
+        body ? `Response body: ${JSON.stringify(body, null, 2)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      console.error(msg);
+      return new Error(msg);
+  }
+
+  /**
+   * Low-level: call WA CloneEvent RPC to duplicate an event as-is.
+   * Returns the newly created event object (as WAEvent).
+   */
+  public async cloneEvent(templateEventId: number): Promise<WAEvent> {
+    const [client, accountId] = await Promise.all([
+      this.makeClient(),
+      this.getAccountId()
+    ]);
+
+    const url = `/rpc/${accountId}/CloneEvent`;
+
+    try {
+      const { data: clonedEventId } = await client.post(url, {
+        EventId: templateEventId,
+      });
+      const clonedEvent = await this.getEvent(clonedEventId);
+      return clonedEvent;
+    } catch (err: any) {
+      throw this.createError(err, [
+        `EventId: ${templateEventId}`
+      ]);
+    }
+  }
+    /**
+   * Convenience: clone, then apply field overrides (e.g., StartDate/EndDate/Name).
+   * Only the fields you provide are updated on the clone.
+   */
+  public async cloneEventWithOverrides(
+    templateEventId: number,
+    overrides: Partial<WAEventCreate>
+  ): Promise<WAEvent> {
+    const [client, accountId] = await Promise.all([this.makeClient(), this.getAccountId()]);
+
+    // 1) clone
+    const cloned = await this.cloneEvent(templateEventId);
+    console.log("Cloned event:", cloned);
+    try {
+      if (overrides && Object.keys(overrides).length) {
+
+        const newEvent = { ...cloned, ...overrides, Id: cloned.Id };
+        //set(newEvent, 'Details.AccessControl.AccessLevel', 'Public');
+        console.log("Applying overrides:", {overrides, newEvent});
+        const { data } = await client.put(
+          `/accounts/${accountId}/events/${cloned.Id}`,
+          newEvent // WA expects full-ish object with Id on PUT
+        );
+        return data as WAEvent;
+      }
+    } catch (err) {
+      throw this.createError(err, [
+        `cloned: ${cloned}`
+      ]);
+    }
+    
+    // 2) update cloned event with overrides (if any)
+    return cloned;
+  }
+
+  /**
+   * Bonus utility: clone the template to many date/times (sequentially),
+   * copying the original duration when EndDate isn’t supplied.
+   */
+  public async cloneEventToDates(
+    templateEventId: number,
+    starts: Array<string | { start: string; end?: string }>,
+    nameFormat?: string // e.g. "${NAME} (${MM}/${DD})"
+  ): Promise<WAEvent[]> {
+    const template = await this.getEvent(templateEventId);
+    const normalize = (x: string | { start: string; end?: string }) =>
+      typeof x === "string" ? { start: x } : x;
+
+    const out: WAEvent[] = [];
+    for (const raw of starts.map(normalize)) {
+      try {
+        //  Calculate end time
+        const end = raw.end ??
+          (template.StartDate && template.EndDate
+            ? new Date(new Date(raw.start).getTime() +
+                (new Date(template.EndDate).getTime() - new Date(template.StartDate).getTime())
+              ).toISOString()
+            : undefined);
+
+        const name = this.formatName(template.Name, raw.start, nameFormat); // you already have formatName
+
+        const created = await this.cloneEventWithOverrides(templateEventId, {
+          Name: name,
+          StartDate: raw.start,
+          ...(end ? { EndDate: end } : {}),
+        });
+
+        out.push(created);
+      } catch (e) {
+        console.error("Error cloning to date:", raw, e);
+      }
+    }
+    return out;
+  }
+
+    /** Apply name format tokens */
+  private formatName(templateName: string, startISO: string, fmt?: string): string {
+    if (!fmt) return templateName;
+    const d = new Date(startISO);
+    const YYYY = String(d.getFullYear());
+    const MM   = String(d.getMonth() + 1).padStart(2, "0");
+    const DD   = String(d.getDate()).padStart(2, "0");
+    return fmt
+      .replace(/\$\{NAME\}/g, templateName)
+      .replace(/\$\{YYYY\}/g, YYYY)
+      .replace(/\$\{MM\}/g, MM)
+      .replace(/\$\{DD\}/g, DD);
   }
 }

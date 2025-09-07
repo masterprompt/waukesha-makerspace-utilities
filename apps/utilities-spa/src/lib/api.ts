@@ -8,9 +8,20 @@ function base() {
   return url.replace(/\/+$/, "");
 }
 
-export async function listEvents(opts: { search?: string } = {}) {
+export async function listEvents(opts: {
+  search?: string;
+  startDateFrom?: string;
+  endDateTo?: string;
+  top?: number;
+  skip?: number;
+} = {}) {
   const u = new URL(base() + "/events", window.location.origin);
   if (opts.search) u.searchParams.set("q", opts.search);
+  if (opts.startDateFrom) u.searchParams.set("startDateFrom", opts.startDateFrom);
+  if (opts.endDateTo) u.searchParams.set("endDateTo", opts.endDateTo);
+  if (typeof opts.top === "number") u.searchParams.set("top", String(opts.top));
+  if (typeof opts.skip === "number") u.searchParams.set("skip", String(opts.skip));
+
   const res = await fetch(u.toString());
   if (!res.ok) throw new Error(`Failed to load events: ${res.status}`);
   return res.json();

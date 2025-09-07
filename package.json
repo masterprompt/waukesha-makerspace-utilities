@@ -14,9 +14,13 @@
   "license": "ISC",
   "packageManager": "pnpm@10.6.5",
   "devDependencies": {
+    "@types/lodash-es": "^4.17.12",
     "@types/node": "^24.3.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "lodash-es": "^4.17.21"
   }
 }
